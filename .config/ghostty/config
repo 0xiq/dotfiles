@@ -1,0 +1,10 @@
+theme = Afterglow 
+font-size = 16
+background-opacity = 0.85
+background-blur = 30
+cursor-style = bar
+cursor-style-blink = true
+mouse-hide-while-typing = true
+macos-titlebar-style = hidden
+
+font-family = "Fira Code Nerd Font Mono"

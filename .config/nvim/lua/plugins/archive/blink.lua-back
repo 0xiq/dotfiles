@@ -1,0 +1,130 @@
+-- lsp.lua  – Blink+Rust matcher without the nag screen
+return {
+	"neovim/nvim-lspconfig",
+
+	dependencies = {
+		"williamboman/mason.nvim",
+		"williamboman/mason-lspconfig.nvim",
+
+		------------------------------------------------------------------
+		-- ⚡ Blink completion
+		------------------------------------------------------------------
+		{
+			"Saghen/blink.cmp",
+			version = "*", -- ← ALWAYS a release tag  [oai_citation_attribution:0‡cmp.saghen.dev](https://cmp.saghen.dev/configuration/fuzzy.html)
+			dependencies = {
+				{ "L3MON4D3/LuaSnip", version = "v2.*" },
+				"rafamadriz/friendly-snippets",
+			},
+			opts = {
+				keymap = { preset = "default" },
+				snippets = { preset = "luasnip" },
+				sources = { default = { "lsp", "path", "snippets", "buffer" } },
+
+				-- --- Fuzzy matcher -------------------------------------------
+				fuzzy = {
+					implementation = "prefer_rust", -- mute the warning
+					prebuilt_binaries = {
+						force_version = "v1.1.0", -- tag to download from  [oai_citation_attribution:1‡cmp.saghen.dev](https://cmp.saghen.dev/configuration/fuzzy.html)
+					},
+				},
+			},
+		},
+	},
+
+	--------------------------------------------------------------------
+	-- EVERYTHING BELOW = unchanged from previous snippet
+	--------------------------------------------------------------------
+	config = function()
+		vim.diagnostic.config({ float = { border = "rounded" } })
+
+		local capabilities = require("blink.cmp").get_lsp_capabilities()
+
+		require("mason").setup()
+		require("mason-lspconfig").setup({
+			ensure_installed = { "lua_ls", "svelte" },
+			automatic_installation = false,
+			handlers = {
+				function(server)
+					require("lspconfig")[server].setup({ capabilities = capabilities })
+				end,
+				lua_ls = function()
+					require("lspconfig").lua_ls.setup({
+						capabilities = capabilities,
+						settings = {
+							Lua = {
+								runtime = { version = "Lua 5.1" },
+								diagnostics = {
+									globals = {
+										"bit",
+										"vim",
+										"it",
+										"describe",
+										"before_each",
+										"after_each",
+									},
+								},
+							},
+						},
+					})
+				end,
+				svelte = function()
+					require("lspconfig").svelte.setup({
+						capabilities = capabilities,
+						on_attach = function(client, _)
+							vim.api.nvim_create_autocmd("BufWritePost", {
+								pattern = { "*.js", "*.ts" },
+								callback = function(ctx)
+									client.notify("$/onDidChangeTsOrJsFile", { uri = ctx.match })
+								end,
+							})
+						end,
+					})
+				end,
+						},
+		})
+
+		-- Pretty hover window
+		local lsp = vim.lsp
+		lsp.handlers["textDocument/hover"] = function(_, result, ctx, cfg)
+			cfg = cfg or { border = "rounded", focusable = true }
+			cfg.focus_id = ctx.method
+			if not (result and result.contents) then
+				return
+			end
+			local lines = lsp.util.convert_input_to_markdown_lines(result.contents)
+			lines = vim.tbl_filter(function(l)
+				return l ~= ""
+			end, lines)
+			if vim.tbl_isempty(lines) then
+				return
+			end
+			return lsp.util.open_floating_preview(lines, "markdown", cfg)
+		end
+
+		-- GLSL *.vert / *.frag
+		vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+			pattern = { "*.vert", "*.frag" },
+			callback = function()
+				vim.cmd("set filetype=glsl")
+			end,
+		})
+
+		-- LSP keymaps
+		vim.api.nvim_create_autocmd("LspAttach", {
+			callback = function(ev)
+				local map = function(m, lhs, rhs, desc)
+					vim.keymap.set(m, lhs, rhs, { buffer = ev.buf, desc = desc })
+				end
+				map("n", "gd", vim.lsp.buf.definition, "[LSP] Go to definition")
+				map("n", "K", vim.lsp.buf.hover, "[LSP] Hover")
+				map("n", "<leader>lf", vim.lsp.buf.format, "[LSP] Format")
+				map("n", "<leader>la", vim.lsp.buf.code_action, "[LSP] Code action")
+				map("n", "<leader>lr", vim.lsp.buf.rename, "[LSP] Rename")
+				map("n", "<leader>k", vim.diagnostic.open_float, "[Diag] Float")
+				map("n", "<leader>ln", vim.diagnostic.goto_next, "[Diag] Next")
+				map("n", "<leader>lp", vim.diagnostic.goto_prev, "[Diag] Prev")
+			end,
+		})
+	end,
+}
